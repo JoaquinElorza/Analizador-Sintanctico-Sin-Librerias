@@ -68,9 +68,9 @@ r1.base(3)
 | Método    | Rango permitido |
 | --------- | --------------- |
 | velocidad | 1 a 10          |
-| base      | 0 a 5           |
-| cuerpo    | 0 a 3           |
-| garra     | 0 a 1           |
+| base      | 0 a 180         |
+| cuerpo    | 0 a 180         |
+| garra     | 0 a 180         |
 
 ## 🎨 Personalización
 
