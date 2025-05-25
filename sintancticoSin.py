@@ -76,36 +76,45 @@ class analizadorSinComponente:
     def analizar_instruccion(self, texto_completo):
         lineas = [line.strip() for line in texto_completo.split('\n') if line.strip()]
         if not lineas:
-            raise ValueError("No se ingresaron instrucciones.")
+            return ["No se ingresaron instrucciones."]
 
         tokens_encontrados = []
+        errores = []
         rangos_metodos = {
             'velocidad': (1, 10),
-            'base': (0, 5),
-            'cuerpo': (0, 3),
-            'garra': (0, 1)
+            'base': (0, 180),
+            'cuerpo': (0, 180),
+            'garra': (0, 180)
         }
 
-        # --- Procesar cabecera: Robot r1 ---
+        # --- Procesar cabecera ---
         try:
             primera_linea = lineas[0]
             tokens = primera_linea.replace('.', ' . ').replace('(', ' ( ').replace(')', ' ) ').split()
             if len(tokens) != 2:
-                raise ValueError("Se esperaba la declaración: Robot r1")
-            if not self.palabras_reservadas(tokens[0]):
-                raise ValueError("Se esperaba 'Robot' en la línea 1")
-            if not self.es_identificador(tokens[1]):
-                raise ValueError("Identificador inválido en la línea 1")
-            tokens_encontrados.append(('p_reservada', tokens[0]))
-            tokens_encontrados.append(('identificador', tokens[1]))
-            nombre_robot = tokens[1]
-        except ValueError as e:
-            raise ValueError(f"Línea 1: {e}")
+                errores.append("Línea 1: Se esperaba la declaración: Robot r1")
+            else:
+                if not self.palabras_reservadas(tokens[0]):
+                    errores.append("Línea 1: Se esperaba 'Robot'")
+                if not self.es_identificador(tokens[1]):
+                    errores.append("Línea 1: Identificador inválido")
+                else:
+                    nombre_robot = tokens[1]
+                    tokens_encontrados.append(('p_reservada', tokens[0]))
+                    tokens_encontrados.append(('identificador', tokens[1]))
+        except Exception as e:
+            errores.append(f"Línea 1: {e}")
+            return errores
 
-        # --- Procesar el resto de líneas ---
+        # Si no se declaró el robot correctamente, no vale seguir
+        if errores:
+            return errores
+
+        # --- Procesar instrucciones ---
         for idx, linea in enumerate(lineas[1:], start=2):
             tokens = linea.replace('.', ' . ').replace('(', ' ( ').replace(')', ' ) ').split()
-            temp_tokens = [] # Lista temporal para almacenar tokens de la línea actual
+            temp_tokens = []
+            linea_valida = True
 
             for token in tokens:
                 if self.es_conector(token):
@@ -121,53 +130,50 @@ class analizadorSinComponente:
                 elif self.es_identificador(token):
                     temp_tokens.append(('identificador', token))
                 else:
-                    raise ValueError(f"Línea {idx}: Token no reconocido: {token}")
+                    errores.append(f"Línea {idx}: Token no reconocido: {token}")
+                    linea_valida = False
 
-            # Validación de la estructura: r1.metodo(valor)
-            if len(temp_tokens) != 6:
-                raise ValueError(f"Línea {idx}: Formato incorrecto, se esperaba 'r1.metodo(valor)'")
+            if not linea_valida or len(temp_tokens) != 6:
+                errores.append(f"Línea {idx}: Formato incorrecto, se esperaba 'r1.metodo(valor)'")
+                continue
 
-            tipo1, val1 = temp_tokens[0] # identificador
-            tipo2, val2 = temp_tokens[1] # conector
-            tipo3, val3 = temp_tokens[2] # metodo
-            tipo4, val4 = temp_tokens[3] # parentesis
-            tipo5, val5 = temp_tokens[4] # valor
-            tipo6, val6 = temp_tokens[5] # parentesis
+            tipo1, val1 = temp_tokens[0]
+            tipo2, val2 = temp_tokens[1]
+            tipo3, val3 = temp_tokens[2]
+            tipo4, val4 = temp_tokens[3]
+            tipo5, val5 = temp_tokens[4]
+            tipo6, val6 = temp_tokens[5]
 
             if tipo1 != 'identificador' or val1 != nombre_robot:
-                raise ValueError(f"Línea {idx}: Se esperaba el identificador '{nombre_robot}'")
+                errores.append(f"Línea {idx}: Se esperaba el identificador '{nombre_robot}'")
             if tipo2 != 'conector' or val2 != '.':
-                raise ValueError(f"Línea {idx}: Se esperaba '.' después del identificador")
-            if tipo3 != 'metodo' or self.es_metodo(val3) == False:
-                print(f"[DEBUG] Token exacto: {repr(token)}")
-                raise ValueError(f"Línea {idx}: Se esperaba un método válido")
+                errores.append(f"Línea {idx}: Se esperaba '.' después del identificador")
+            if tipo3 != 'metodo' or not self.es_metodo(val3):
+                errores.append(f"Línea {idx}: Se esperaba un método válido")
             if tipo4 != 'parentesisI' or val4 != '(':
-                raise ValueError(f"Línea {idx}: Se esperaba '(' después del método")
+                errores.append(f"Línea {idx}: Se esperaba '(' después del método")
             if tipo5 != 'valor':
-                raise ValueError(f"Línea {idx}: Se esperaba un valor dentro del paréntesis")
+                errores.append(f"Línea {idx}: Se esperaba un valor dentro del paréntesis")
             if tipo6 != 'parentesisD' or val6 != ')':
-                raise ValueError(f"Línea {idx}: Se esperaba ')' al final")
-            
+                errores.append(f"Línea {idx}: Se esperaba ')' al final")
 
-            # Obtener valor dentro del paréntesis
+            # Validar rango del valor
             try:
-                valor_token = val5
-                if not self.es_valor(valor_token):
-                    raise ValueError(f"Línea {idx}: Valor inválido dentro del paréntesis")
-                valor_int = int(valor_token)
-                if val3 in rangos_metodos:
-                    minimo, maximo = rangos_metodos[val3]
-                    if not (minimo <= valor_int <= maximo):
-                        raise ValueError(f"Línea {idx}: El valor de '{val3}' debe estar entre {minimo} y {maximo}")
-                else:
-                    raise ValueError(f"Línea {idx}: Método no reconocido: {val3}")
-            except IndexError:
-                raise ValueError(f"Línea {idx}: No se encontró el valor dentro del paréntesis")
+                if tipo5 == 'valor':
+                    valor_int = int(val5)
+                    if val3 in rangos_metodos:
+                        minimo, maximo = rangos_metodos[val3]
+                        if not (minimo <= valor_int <= maximo):
+                            errores.append(f"Línea {idx}: El valor de '{val3}' debe estar entre {minimo} y {maximo}")
+                    else:
+                        errores.append(f"Línea {idx}: Método no reconocido: {val3}")
+            except Exception:
+                errores.append(f"Línea {idx}: Valor no válido")
 
             tokens_encontrados.extend(temp_tokens)
-            tokens_encontrados.append(('valor', valor_token))
 
-        return tokens_encontrados
+        return errores if errores else tokens_encontrados
+
 
 
 
@@ -180,11 +186,16 @@ class analizadorSinComponente:
             messagebox.showwarning("Advertencia", "Por favor ingrese al menos una instrucción.")
             return
 
-        try:
-            self.analizar_instruccion(texto)
+        resultado = self.analizar_instruccion(texto)
+
+        if isinstance(resultado, list) and resultado and isinstance(resultado[0], str):
+            for error in resultado:
+                self.resultados_text.insert(tk.END, f"Error: {error}\n", 'error')
+        else:
             self.resultados_text.insert(tk.END, "Instrucción válida.\n", 'header')
-        except ValueError as e:
-            self.resultados_text.insert(tk.END, f"Error: {e}\n", 'error')
+
+
+
 
 
 
